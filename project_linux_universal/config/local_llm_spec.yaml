@@ -1,0 +1,196 @@
+ysystem:
+  name: project_linux_universal
+  version: 1.0
+  purpose:
+    - local LLM assistant for Arch/Linux
+    - offline-first with optional web fetch
+    - no automatic command execution
+    - modular and extensible
+
+hardware:
+  cpu: "Intel i7-4710MQ"
+  cores: 4
+  threads: 6 #8
+  ram_gb: 16
+  gpu: "ignored"
+  constraints:
+    - cpu_inference_only: true
+    - max_model_size: "7B Q4_K_M"
+
+
+models:
+  default: code
+  available:
+    code:
+      name: deepseek-coder-6.7b
+      path: models/deepseek-coder.gguf
+      role: "linux commands, debugging, programming"
+    general:
+      name: mistral-7b-instruct
+      path: models/mistral.gguf
+      role: "explanations, general knowledge"
+    fallback:
+      name: llama3
+      path: models/llama3.gguf
+      role: "current stable baseline"
+  requirements:
+    - dynamic_loading: true
+    - switchable: true
+    - extensible: true
+
+runner:
+  backend: llama.cpp
+  batch: 256
+  execution:
+    type: cli
+    command_template: >
+      llama-cli -m {model}
+      -t {threads}
+      -c {context}
+      -b {batch}
+      -n {max_tokens}
+      --temp {temperature}
+      --top-p {top_p}
+      --no-interactive
+
+
+
+parameters:
+  temperature:
+    default: 0.2
+    range: [0.0, 1.0]
+  top_p:
+    default: 0.9
+    range: [0.0, 1.0]
+  context:
+    default: 1024 #2048
+    options: [2048, 4096]
+
+prompt:
+  active_profile: linux_helper_short
+  profiles:
+    linux_helper_short: prompts/linux_helper_short.txt
+    linux_helper_adaptive: prompts/linux_helper_adaptive.txt
+    coding_helper_deepseek: prompts/coding_helper_deepseek.txt
+
+  modes:
+    learning:
+      include_command_breakdown: true
+    normal:
+      include_command_breakdown: false
+
+input:
+  types:
+    - natural_language
+    - command
+  command_prefix: "/"
+  supported_commands:
+    - /model
+    - /mode
+    - /fetch
+    - /params
+    - /history
+
+parser:
+  rules:
+    - if starts_with("/"): command
+    - if contains("fetch"): fetch_intent
+    - else: normal_query
+
+fetch:
+  enabled: true
+  mode: manual
+  command: "/fetch <url>"
+  behavior:
+    - download_url
+    - extract_text
+    - inject_into_prompt_as_context
+
+safety:
+  enabled: true
+  patterns:
+    - "rm -rf"
+    - "mkfs"
+    - "dd"
+    - ":(){:|:&};:"
+  behavior:
+    highlight: true
+    hide_if_safe_mode: true
+
+modes:
+  operation:
+    default: single_shot
+    available:
+      single_shot:
+        history: false
+      chat:
+        history: true
+
+history:
+  enabled: true
+  persistent: optional
+  storage: json
+  file: history.json
+
+rag:
+  enabled: false
+  phase: 2
+  tool: llama-index
+  sources:
+    - arch_wiki
+    - man_pages
+    - user_notes
+  pipeline:
+    - embed_documents
+    - retrieve_relevant_chunks
+    - inject_into_prompt
+
+arch_wiki:
+  local_mirror: true
+  update_method: git
+  update_frequency: weekly
+
+cli:
+  required: true
+  commands:
+    - ask <question>
+    - /model
+    - /mode
+    - /fetch
+
+gui:
+  phase: 3
+  framework: pyqt
+  components:
+    - input_field
+    - output_panel
+    - model_switch
+    - mode_switch
+    - learning_toggle
+    - safety_toggle
+    - parameter_sliders
+    - response_time_display
+
+performance:
+  expected:
+    tokens_per_second: 6-10
+    short_response_seconds: 3-6
+    long_response_seconds: 10-20
+
+development:
+  phases:
+    - models_setup
+    - python_cli_wrapper
+    - model_switching
+    - fetch_system
+    - safety_layer
+    - chat_mode
+    - rag_integration
+    - gui
+
+principles:
+  - no_auto_execution
+  - full_user_control
+  - modular_design
+  - incremental_build
+  - transparency
